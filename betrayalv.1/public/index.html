@@ -1,0 +1,65 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Betrayal: The House</title>
+<style>body{margin:0;background:#07060a;color:#d8cfc0;font:15px Georgia,serif;overflow:hidden}#ui{position:fixed;left:0;top:0;width:300px;height:100%;background:#0d0b12ee;padding:10px;box-sizing:border-box;overflow:auto;border-right:1px solid #3a2a2a;z-index:2}
+button{background:#2a1c1c;color:#e8d8c0;border:1px solid #6a3a3a;padding:5px 9px;margin:2px;cursor:pointer;font:inherit}button:hover{background:#4a2a2a}button:disabled{opacity:.4}#log{font-size:13px;height:220px;overflow:auto;background:#000a;padding:6px;margin-top:8px}h3{margin:8px 0 4px;color:#c9a35b}.bar{display:inline-block;margin-right:8px}.hn{color:#e66}small{color:#a99}
+#flash{position:fixed;left:310px;right:10px;bottom:24px;text-align:center;font-size:22px;text-shadow:0 0 8px #000,0 0 3px #000;pointer-events:none;transition:opacity 1s}</style></head><body>
+<div id="ui"><h3>Betrayal: The House</h3><div id="top"></div><div id="me"></div><div id="act"></div><div><button onclick="F='U'">Upper</button><button onclick="F='G'">Ground</button><button onclick="F='B'">Basement</button></div>
+<label><input type="checkbox" id="nar" onchange="nar=this.checked"> Narrator</label> <label><input type="checkbox" id="mus" onchange="music(this.checked)"> Music</label> <label><input type="checkbox" id="sfxc" checked onchange="sfxOn=this.checked"> SFX</label><br><small>WASD/arrows move, scroll zooms</small><div id="log"></div></div><div id="flash"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script>
+const NM=['Speed','Might','Sanity','Knowledge'],TR=[0,2,3,3,4,5,6,7,8],PC=[0x3b82f6,0xf59e0b,0x10b981,0xec4899,0xa78bfa,0xef4444];
+let ws,S=null,CHN=[],me=sessionStorage.id||null,F='G',nar=false,sfxOn=true,lastI=0,zoom=11,pending=false;
+function conn(){ws=new WebSocket((location.protocol=='https:'?'wss://':'ws://')+location.host);ws.onopen=()=>{if(me)ws.send(JSON.stringify({t:'hello',id:me}))};
+ ws.onmessage=e=>{const d=JSON.parse(e.data);if(d.you){me=d.you;sessionStorage.id=me;return}S=d.G;CHN=d.CH;const mp=S.players[me];if(mp&&mp.f!=lastF){F=mp.f;lastF=mp.f}
+  S.log.filter(l=>l.i>lastI).forEach(l=>{lastI=l.i;fx(l)});build();ui()};ws.onclose=()=>setTimeout(conn,1500)}
+let lastF=null;conn();const send=o=>ws&&ws.readyState==1&&ws.send(JSON.stringify(o));
+// ---------- 3D ----------
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x07060a,.045);const cam=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,.1,100),ren=new THREE.WebGLRenderer({antialias:true});ren.setSize(innerWidth,innerHeight);document.body.appendChild(ren.domElement);
+scene.add(new THREE.AmbientLight(0x66557a,.8));const lamp=new THREE.PointLight(0xffaa55,1.6,16);scene.add(lamp);const tg=new THREE.Group();scene.add(tg);
+const M=(c,o={})=>new THREE.MeshStandardMaterial({color:c,roughness:.9,...o}),B=(w,h,d,c,x,y,z,g)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c));m.position.set(x,y,z);g.add(m);return m};
+const hs=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return h},FL={G:.07,U:.12,B:0};
+function label(t){const k=document.createElement('canvas');k.width=256;k.height=48;const x=k.getContext('2d');x.fillStyle='#e8d8a0';x.font='22px Georgia';x.textAlign='center';x.fillText(t,128,30);const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(k),transparent:true}));s.scale.set(3,.56,1);return s}
+function prop(n,g){const c=0x6b4a2a;
+ if(/Library|Study|Gallery|Trophy/.test(n)){B(3,1.2,.3,c,0,.7,-1.5,g);B(.3,1.2,2,c,-1.5,.7,0,g)}
+ else if(/Kitchen|Dining|Billiard|Pantry/.test(n)){B(1.6,.5,1,c,0,.45,0,g)}
+ else if(/Bedroom|Nursery|Guest/.test(n)){B(1.4,.4,.8,0x7a2a3a,.4,.4,.4,g);B(.2,.7,.8,c,-.4,.6,.4,g)}
+ else if(/Crypt|Ossuary|Catacombs/.test(n)){B(1.6,.4,.7,0x888880,0,.4,0,g)}
+ else if(/Wine|Cellar|Boiler/.test(n)){for(let i=0;i<3;i++){const m=new THREE.Mesh(new THREE.CylinderGeometry(.35,.35,.7,10),M(c));m.position.set(-1+i*1,.45,-1);g.add(m)}}
+ else if(/Chapel|Ritual/.test(n)){B(1.4,.7,.5,0x777,0,.5,-1,g);const cr=B(.1,.9,.1,0xcca,0,1.3,-1,g)}
+ else if(/Pit/.test(n)){const m=new THREE.Mesh(new THREE.CylinderGeometry(1,1,.05,16),M(0));m.position.y=.15;g.add(m)}
+ else if(/Mirror/.test(n)){B(.1,1.4,1.2,0x99bbcc,-1.7,1,0,g)}
+ else if(/Vault/.test(n)){B(1,.8,.8,0xb8962e,0,.6,0,g)}}
+function mkTile(t){const g=new THREE.Group();g.position.set(t.x*4,0,-t.y*4);const col=new THREE.Color().setHSL(hs(t.n)/360,.25,.2+FL[t.f]);B(3.9,.2,3.9,col,0,0,0,g);
+ const wc=0x2d2634;for(const d of 'nesw'){const ax=d=='n'||d=='s',s=(d=='n'||d=='w')?-1:1,o=1.9*s;const seg=(len,off)=>ax?B(len,1.5,.15,wc,off,.85,o,g):B(.15,1.5,len,wc,o,.85,off,g);
+  if(t.d.includes(d)){seg(1.3,-1.3);seg(1.3,1.3);const l=ax?B(1.3,.15,.15,0x4a3320,0,1.55,o,g):B(.15,.15,1.3,0x4a3320,o,1.55,0,g)}else seg(3.9,0)}
+ prop(t.n,g);if(t.sym){const m=new THREE.Mesh(t.sym=='O'?new THREE.TorusGeometry(.35,.1,8,16):t.sym=='E'?new THREE.OctahedronGeometry(.35):new THREE.BoxGeometry(.5,.4,.5),M(t.sym=='O'?0xaa2222:t.sym=='E'?0x7744cc:0xc9a35b,{emissive:t.sym=='O'?0x551111:t.sym=='E'?0x331166:0x443311}));m.position.set(1,1.2,1);m.userData.spin=1;g.add(m)}
+ const l=label(t.n);l.position.y=2.4;g.add(l);return g}
+const pm={};function mkPlayer(p){const g=new THREE.Group(),c=PC[p.c];const b=new THREE.Mesh(new THREE.CylinderGeometry(.22,.35,.8,12),M(c));b.position.y=.5;g.add(b);const h=new THREE.Mesh(new THREE.SphereGeometry(.22,12,12),M(0xe8cfa8));h.position.y=1.1;g.add(h);
+ const hat=new THREE.Mesh(new THREE.ConeGeometry(.2,.3,10),M(c));hat.position.y=1.4;g.add(hat);g.userData={tx:0,tz:0};scene.add(g);return g}
+function build(){tg.clear();for(const t of Object.values(S.tiles))if(t.f==F)tg.add(mkTile(t));
+ const at={};Object.values(S.players).forEach(p=>{let m=pm[p.id];if(!m){m=pm[p.id]=mkPlayer(p);m.position.set(p.x*4,0,-p.y*4)}const k=p.f+p.x+p.y,n=at[k]=(at[k]||0)+1;m.visible=p.f==F&&!p.dead;m.userData.tx=p.x*4+(n-1)*.5-.25;m.userData.tz=-p.y*4+.4;m.userData.p=p;
+  m.children[0].material.emissive.setHex(p.id==S.traitor&&S.haunt?0xaa0000:p.id==S.order[S.turn]?0x444444:0)})}
+function cp(){const p=S&&S.players[me]||(S&&S.players[S.order[S.turn]]);return p?pm[p.id]:null}
+addEventListener('wheel',e=>{zoom=Math.max(6,Math.min(22,zoom+e.deltaY*.01))});
+(function anim(){requestAnimationFrame(anim);const t=Date.now()/1000;for(const m of Object.values(pm)){m.position.x+=(m.userData.tx-m.position.x)*.12;m.position.z+=(m.userData.tz-m.position.z)*.12;const mv=Math.hypot(m.userData.tx-m.position.x,m.userData.tz-m.position.z);m.position.y=mv>.1?Math.abs(Math.sin(t*14))*.15:Math.sin(t*2)*.03}
+ tg.traverse(o=>{if(o.userData.spin){o.rotation.y+=.03;o.position.y=1.2+Math.sin(t*2)*.1}});const f=cp();if(f){const x=f.position.x,z=f.position.z;cam.position.x+=(x-cam.position.x)*.06;cam.position.z+=(z+zoom*.75-cam.position.z)*.06;cam.position.y=zoom;cam.lookAt(cam.position.x,0,cam.position.z-zoom*.75);lamp.position.set(x,2.6,z)}else{cam.position.set(0,zoom,zoom*.75);cam.lookAt(0,0,0)}
+ lamp.intensity=1.4+Math.random()*.4+(S&&S.haunt?Math.sin(t*3)*.3:0);ren.render(scene,cam)})();
+onresize=()=>{ren.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()};
+// ---------- UI ----------
+function ui(){const t=top_,a=act_,mm=me_,mp=S.players[me];
+ if(S.phase=='lobby'){t.innerHTML='<h3>Choose your explorer</h3>'+CHN.map((n,i)=>`<button ${Object.values(S.players).some(p=>p.c==i)||mp?'disabled':''} onclick="send({t:'join',c:${i}})">${n}</button>`).join('<br>')+'<br><button onclick="send({t:\'start\'})">Start (2+ players)</button>';a.innerHTML=mm.innerHTML=''}
+ else{const H=S.haunt;t.innerHTML=(S.winner?`<h3>${S.winner}</h3><button onclick="send({t:'reset'})">New game</button>`:H?`<h3 class="hn">${H.n}</h3><small>${H.g}</small>`:'<h3>Omens: '+S.omens+'</h3>')+'<br>Round '+S.round+(H&&H.r=='ritual'?' | Ritual '+S.prog+'/6':H&&H.r=='escape'?' | Escaped '+S.prog+'/2':H&&H.r=='doom'?' | Doom at 10':H&&H.r=='survive'?' | Survive to 12':'')+'<br>Turn: '+S.players[S.order[S.turn]].name;
+  if(mp){mm.innerHTML='<h3>'+mp.name+(me==S.traitor&&S.haunt?' — TRAITOR':'')+'</h3>'+mp.s.map((v,i)=>`<span class="bar">${NM[i]} ${TR[v]}</span>`).join('')+'<br>Items: '+(mp.items.join(', ')||'none')+'<br>Omens: '+(mp.omens.join(', ')||'none')+'<br>Moves left: '+(S.order[S.turn]==me?mp.mv:'-');
+   const mine=S.order[S.turn]==me&&!S.winner,tl=S.tiles[`${mp.f},${mp.x},${mp.y}`];a.innerHTML=mine?['n','s','w','e'].map(d=>`<button ${tl.d.includes(d)?'':'disabled'} onclick="send({t:'move',d:'${d}'})">${{n:'↑ N',s:'↓ S',w:'← W',e:'→ E'}[d]}</button>`).join('')+`<button ${tl.st?'':'disabled'} onclick="send({t:'stairs'})">Stairs</button><button onclick="send({t:'end'})">End turn</button>`+(S.haunt?Object.values(S.players).filter(q=>q.id!=me&&!q.dead&&q.f==mp.f&&q.x==mp.x&&q.y==mp.y).map(q=>`<br><button onclick="send({t:'attack',target:'${q.id}'})">Attack ${q.name}</button>`).join(''):''):''}}
+ log_.innerHTML=S.log.map(x=>'<div>'+x.t+'</div>').join('');log_.scrollTop=1e9}
+const top_=document.getElementById('top'),act_=document.getElementById('act'),me_=document.getElementById('me'),log_=document.getElementById('log');
+addEventListener('keydown',e=>{const d={w:'n',s:'s',a:'w',d:'e',ArrowUp:'n',ArrowDown:'s',ArrowLeft:'w',ArrowRight:'e'}[e.key];if(d)send({t:'move',d})});
+// ---------- Audio ----------
+let ready=false,sy={},hb,loop,syn;addEventListener('click',()=>{if(!ready){ready=true;Tone.start().then(initA)}});
+function initA(){const rev=new Tone.Reverb(5).toDestination();sy.ns=new Tone.NoiseSynth({envelope:{attack:.005,decay:.15,sustain:0}}).connect(rev);sy.ns.volume.value=-16;sy.mem=new Tone.MembraneSynth().toDestination();sy.mem.volume.value=-6;sy.cr=new Tone.Synth({oscillator:{type:'sawtooth'},portamento:.4,envelope:{attack:.05,decay:.5,sustain:0,release:.3}}).connect(rev);sy.cr.volume.value=-20;sy.bell=new Tone.FMSynth({envelope:{attack:.01,decay:1,sustain:0,release:1}}).connect(rev);sy.bell.volume.value=-14;
+ syn=new Tone.PolySynth(Tone.Synth,{oscillator:{type:'sine'},envelope:{attack:3,release:4}}).connect(rev);syn.volume.value=-20}
+function fx(l){const k=l.k;if(nar&&window.speechSynthesis&&k!='turn'){const u=new SpeechSynthesisUtterance(l.t.replace(/[\[\]]/g,''));u.rate=.85;u.pitch=.6;speechSynthesis.speak(u)}
+ const f=document.getElementById('flash');if(k!='move'&&k!='turn'){f.style.opacity=1;f.textContent=l.t;clearTimeout(f.h);f.h=setTimeout(()=>f.style.opacity=0,4500)}
+ if(!ready||!sfxOn||!sy.ns)return;const n=Tone.now();try{(({move:()=>sy.ns.triggerAttackRelease('16n'),discover:()=>{sy.cr.triggerAttackRelease('C2','4n',n);sy.cr.setNote('G1',n+.3)},event:()=>{sy.bell.triggerAttackRelease('C4','8n',n);sy.bell.triggerAttackRelease('F#4','8n',n+.1)},item:()=>{sy.bell.triggerAttackRelease('E5','16n',n);sy.bell.triggerAttackRelease('B5','8n',n+.1)},omen:()=>{sy.mem.triggerAttackRelease('A0','2n',n);sy.bell.triggerAttackRelease('G#3','2n',n+.2)},haunt:()=>{sy.mem.triggerAttackRelease('C1','1n',n);sy.cr.triggerAttackRelease('C1','1n',n);sy.bell.triggerAttackRelease('F#2','1n',n+.3);haunted()},hit:()=>{sy.ns.triggerAttackRelease('8n');sy.mem.triggerAttackRelease('E1','16n',n)},death:()=>{sy.mem.triggerAttackRelease('C0','1n',n);sy.cr.triggerAttackRelease('A1','1n',n)},win:()=>{sy.bell.triggerAttackRelease('C5','2n',n);sy.bell.triggerAttackRelease('G5','2n',n+.3)}})[k]||(()=>0))()}catch(e){}}
+function music(on){if(!on){Tone.Transport.stop();return}Tone.start().then(()=>{ready=true;if(!sy.ns)initA();if(!loop){const ch=[['A2','C3','E3'],['F2','A2','C3'],['D2','F2','A2'],['E2','G#2','B2']];let i=0;loop=new Tone.Loop(t=>syn.triggerAttackRelease(ch[i++%4],'4m',t),'4m').start(0);hb=new Tone.Loop(t=>{sy.mem.triggerAttackRelease('C1','16n',t);sy.mem.triggerAttackRelease('C1','16n',t+.25)},'1n');Tone.Transport.bpm.value=50}Tone.Transport.start();if(S&&S.haunt)haunted()})}
+function haunted(){if(hb&&hb.state!='started'){hb.start(0);Tone.Transport.bpm.value=70}}
+</script></body></html>
